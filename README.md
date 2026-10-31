@@ -66,11 +66,11 @@ These projects are selected automatically by a GitHub Actions workflow. The rank
 <!-- FEATURED_PROJECTS:START -->
 | Repository | Description | Stars | Views (14 days) | Language |
 |---|---|---:|---:|---|
+| [Personal-Protfolio](https://github.com/Krishal-Tech/Personal-Protfolio) | No description provided. | ⭐ 3 | 0 | HTML |
+| [Personal-Protfolio-Design](https://github.com/Krishal-Tech/Personal-Protfolio-Design) | It's my website code | ⭐ 3 | 0 | CSS |
 | [JARVIS-Local-virtual-private-assistant-](https://github.com/Krishal-Tech/JARVIS-Local-virtual-private-assistant-) | No description provided. | ⭐ 3 | 0 | Python |
-| [Personal-Protfolio-Design](https://github.com/Krishal-Tech/Personal-Protfolio-Design) | It's my website code | ⭐ 2 | 0 | CSS |
-| [Personal-Protfolio](https://github.com/Krishal-Tech/Personal-Protfolio) | No description provided. | ⭐ 1 | 0 | HTML |
 
-<sub>Traffic data was unavailable to the workflow, so this list is ranked by stars. Last refreshed: 2026-10-31 13:08 UTC.</sub>
+<sub>Traffic data was unavailable to the workflow, so this list is ranked by stars. Last refreshed: 2026-10-31 13:24 UTC.</sub>
 <!-- FEATURED_PROJECTS:END -->
 
 <sub>Ranking is refreshed daily. Star counts are cumulative; view counts are recent traffic, so this ranking is a discovery signal, not a measure of project quality.</sub>
