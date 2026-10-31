@@ -2,7 +2,7 @@ name: Update featured projects
 
 on:
   schedule:
-    - cron: "15 18 * * *" # Daily at 03:17 UTC
+    - cron: "15 18 * * *" # Daily at 18:15 UTC , 12:00 AM NPT
   workflow_dispatch:
   push:
     paths:
