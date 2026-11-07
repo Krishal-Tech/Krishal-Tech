@@ -84,7 +84,6 @@ These projects are selected automatically by a GitHub Actions workflow. The rank
 <br />
 
 <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Krishal-Tech&layout=compact&hide_border=true&bg_color=0D1117&title_color=00E5FF&text_color=C9D1D9&langs_count=8" width="100%" alt="Most used programming languages" />
-
 <br />
 
 <img src="https://streak-stats.demolab.com?user=Krishal-Tech&hide_border=true&background=0D1117&ring=00E5FF&fire=8B5CF6&currStreakLabel=00E5FF&sideLabels=C9D1D9&currStreakNum=FFFFFF&sideNums=FFFFFF&dates=7D8590" width="100%" alt="GitHub contribution streak" />
