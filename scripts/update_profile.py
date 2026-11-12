@@ -1,120 +1,123 @@
 #!/usr/bin/env python3
-import json, os, sys, urllib.request, urllib.error
+"""Update the featured-project section in README.md using GitHub repository metrics."""
+
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-OWNER, REPO = os.environ["GITHUB_REPOSITORY"].split("/", 1)
-README = Path("README.md")
+OWNER = os.environ.get("GITHUB_OWNER", "Krishal-Tech")
+README = Path(os.environ.get("README_PATH", "README.md"))
+TOKEN = os.environ.get("GH_TRAFFIC_TOKEN", "")
+START = "<!-- FEATURED_PROJECTS:START -->"
+END = "<!-- FEATURED_PROJECTS:END -->"
 API = "https://api.github.com"
-TOKEN = os.getenv("GITHUB_TOKEN")
-TRAFFIC_TOKEN = os.getenv("GH_TRAFFIC_TOKEN")
-FS, FE = "<!-- FEATURED_PROJECTS:START -->", "<!-- FEATURED_PROJECTS:END -->"
-AS, AE = "<!-- GITHUB_ANALYTICS:START -->", "<!-- GITHUB_ANALYTICS:END -->"
 
-def get(path, token=TOKEN):
-    headers = {"Accept":"application/vnd.github+json",
-               "X-GitHub-Api-Version":"2022-11-28",
-               "User-Agent":"Krishal-Profile-Analytics"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(API + path, headers=headers)
-    with urllib.request.urlopen(req, timeout=25) as res:
-        return json.loads(res.read().decode())
 
-def replace_block(text, start, end, body):
-    if start not in text or end not in text:
-        raise RuntimeError(f"Missing README markers: {start} / {end}")
-    left, rest = text.split(start, 1)
-    _, right = rest.split(end, 1)
-    return left + start + "\n" + body.rstrip() + "\n" + end + right
+def api_get(url: str):
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "featured-projects-readme-updater",
+    }
+    if TOKEN:
+        headers["Authorization"] = f"Bearer {TOKEN}"
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
 
-def repositories():
-    found, page = [], 1
-    while True:
-        batch = get(f"/users/{OWNER}/repos?type=owner&per_page=100&page={page}")
-        if not batch: break
-        found.extend(batch)
-        if len(batch) < 100: break
-        page += 1
-    return [r for r in found if not r["fork"] and not r["archived"]
-            and not r["disabled"] and r["name"] != REPO]
 
-def language_totals(repos):
-    totals = {}
-    for repo in repos:
-        try:
-            for lang, size in get(f"/repos/{OWNER}/{repo['name']}/languages").items():
-                totals[lang] = totals.get(lang, 0) + size
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
-            pass
-    return sorted(totals.items(), key=lambda x: x[1], reverse=True)
+def safe_text(value: str) -> str:
+    return (value or "No description provided.").replace("\r", " ").replace("\n", " ").replace("|", "\\|").strip()
 
-def views(name):
-    if not TRAFFIC_TOKEN: return None
+
+def get_views(repo_full_name: str):
+    """Return (view count, True) if traffic is readable, otherwise (0, False)."""
+    url = f"{API}/repos/{repo_full_name}/traffic/views"
     try:
-        return int(get(f"/repos/{OWNER}/{name}/traffic/views", TRAFFIC_TOKEN).get("count", 0))
+        data = api_get(url)
+        return int(data.get("count", 0)), True
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ValueError):
-        return None
+        return 0, False
 
-def featured(repos):
-    ranked, traffic_ok = [], False
-    for r in repos:
-        v = views(r["name"])
-        if v is not None: traffic_ok = True
-        ranked.append((r, v))
-    if traffic_ok:
-        ranked.sort(key=lambda x: (x[1] if x[1] is not None else -1,
-                                   x[0].get("stargazers_count", 0)), reverse=True)
-    else:
-        ranked.sort(key=lambda x: x[0].get("stargazers_count", 0), reverse=True)
-    rows = ["| Repository | Description | Stars | Views (14 days) | Language |",
-            "|---|---|---:|---:|---|"]
-    for r, v in ranked[:3]:
-        name = r["name"]
-        desc = (r.get("description") or "No description provided.").replace("|", "\\|")
-        rows.append(f"| [{name}](https://github.com/{OWNER}/{name}) | {desc} | "
-                    f"⭐ {r.get('stargazers_count', 0)} | {v if v is not None else '—'} | "
-                    f"{r.get('language') or '—'} |")
-    if not ranked: rows.append("| No public projects found | — | — | — | — |")
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    note = ("Traffic data available for at least some repositories." if traffic_ok
-            else "Traffic data unavailable; ranked by stars.")
-    rows += ["", f"<sub>{note} Last refreshed: {stamp}.</sub>"]
-    return "\n".join(rows)
-
-def analytics(repos, langs):
-    stars = sum(r.get("stargazers_count", 0) for r in repos)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    out = ["<div align=\"center\">", "",
-           "| ⭐ Total Stars | 📁 Public Repositories | 🧠 Languages Detected |",
-           "|:---:|:---:|:---:|",
-           f"| **{stars}** | **{len(repos)}** | **{len(langs)}** |",
-           "", "**Most Used Programming Languages**", ""]
-    if langs:
-        out += ["| Language | Relative code volume |", "|---|---|"]
-        maximum = langs[0][1] or 1
-        for name, size in langs[:8]:
-            n = max(1, round(size / maximum * 10))
-            out.append(f"| **{name}** | `{'▰' * n}{'▱' * (10-n)}` |")
-    else:
-        out.append("_No public language data returned by GitHub._")
-    out += ["", f"<sub>Generated from GitHub's public repository API. Last refreshed: {stamp}.</sub>",
-            "", "</div>"]
-    return "\n".join(out)
 
 def main():
-    if not README.exists(): raise RuntimeError("README.md not found at repository root.")
-    text = README.read_text(encoding="utf-8")
-    repos = repositories()
-    langs = language_totals(repos)
-    text = replace_block(text, FS, FE, featured(repos))
-    text = replace_block(text, AS, AE, analytics(repos, langs))
-    README.write_text(text, encoding="utf-8")
-    print(f"Updated: {len(repos)} public repositories; "
-          f"{sum(r.get('stargazers_count', 0) for r in repos)} stars; {len(langs)} languages.")
+    if not README.exists():
+        raise SystemExit(f"README not found: {README}")
+
+    repos_url = f"{API}/users/{urllib.parse.quote(OWNER)}/repos?per_page=100&type=owner&sort=updated"
+    repos = api_get(repos_url)
+    if not isinstance(repos, list):
+        raise SystemExit("GitHub did not return a repository list.")
+
+    # Exclude forks, archived repos, disabled repos, and the special profile README repository.
+    repos = [
+        r for r in repos
+        if not r.get("fork")
+        and not r.get("archived")
+        and not r.get("disabled")
+        and r.get("name", "").lower() != OWNER.lower()
+    ]
+
+    if not repos:
+        section = "_No eligible repositories found yet._"
+    else:
+        traffic_results = []
+        traffic_available = 0
+        for repo in repos:
+            views, available = get_views(repo["full_name"])
+            traffic_available += int(available)
+            traffic_results.append({**repo, "recent_views": views})
+
+        # If none of the traffic endpoints are readable, fall back to star-based ranking.
+        if traffic_available == 0:
+            ranked = sorted(traffic_results, key=lambda r: (r.get("stargazers_count", 0), r.get("updated_at", "")), reverse=True)
+            ranking_note = "Traffic data was unavailable to the workflow, so this list is ranked by stars."
+        else:
+            # Combine ordinal ranks so stars and 14-day views contribute equally without
+            # adding incomparable raw numbers together. Lower rank numbers are better.
+            star_order = sorted(traffic_results, key=lambda r: (r.get("stargazers_count", 0), r.get("updated_at", "")), reverse=True)
+            view_order = sorted(traffic_results, key=lambda r: (r.get("recent_views", 0), r.get("stargazers_count", 0)), reverse=True)
+            star_rank = {r["full_name"]: i for i, r in enumerate(star_order)}
+            view_rank = {r["full_name"]: i for i, r in enumerate(view_order)}
+            for r in traffic_results:
+                r["combined_score"] = star_rank[r["full_name"]] + view_rank[r["full_name"]]
+            ranked = sorted(
+                traffic_results,
+                key=lambda r: (r["combined_score"], -r.get("stargazers_count", 0), -r.get("recent_views", 0)),
+            )
+            ranking_note = "Ranked by combined star rank and recent-view rank (last 14 days)."
+
+        rows = [
+            "| Repository | Description | Stars | Views (14 days) | Language |",
+            "|---|---|---:|---:|---|",
+        ]
+        for repo in ranked[:3]:
+            name = repo["name"]
+            url = repo.get("html_url", f"https://github.com/{repo['full_name']}")
+            description = safe_text(repo.get("description") or "No description provided.")
+            language = safe_text(repo.get("language") or "—")
+            stars = int(repo.get("stargazers_count", 0))
+            views = int(repo.get("recent_views", 0))
+            rows.append(f"| [{name}]({url}) | {description} | ⭐ {stars} | {views} | {language} |")
+        rows.extend(["", f"<sub>{ranking_note} Last refreshed: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.</sub>"])
+        section = "\n".join(rows)
+
+    content = README.read_text(encoding="utf-8")
+    if START not in content or END not in content:
+        raise SystemExit("Could not find featured-project markers in README.md.")
+    before, rest = content.split(START, 1)
+    _, after = rest.split(END, 1)
+    updated = f"{before}{START}\n{section}\n{END}{after}"
+    if updated != content:
+        README.write_text(updated, encoding="utf-8")
+        print("Updated featured projects in README.md")
+    else:
+        print("Featured-project section is already up to date")
+
 
 if __name__ == "__main__":
-    try: main()
-    except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+    main()
